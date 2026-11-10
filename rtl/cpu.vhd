@@ -1136,10 +1136,12 @@ begin
                mem1_address   <= unsigned(ss_in(5)(31 downto 0)); -- last was branch -> should be patched in the savestate already
                fill_addrTag   <= unsigned(ss_in(5)(31 downto 0));
                PC             <= unsigned(ss_in(5)); 
+               PCold0         <= unsigned(ss_in(5)); 
             else
                mem1_address   <= unsigned(ss_in(0)(31 downto 0)); -- x"FFFFFFFFBFC00000";    
                fill_addrTag   <= unsigned(ss_in(0)(31 downto 0));
                PC             <= unsigned(ss_in(0)); -- x"FFFFFFFFBFC00000";                    
+               PCold0         <= unsigned(ss_in(0)); -- the first instruction carries its own pc, an interrupt pending at load needs it for EPC
             end if;
             stall1         <= '1';
             fetchReady     <= '1';
