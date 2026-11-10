@@ -349,6 +349,7 @@ architecture arch of RDP is
    signal pixel9Zfilled             : std_logic := '0';
 
    signal writePixelsDone           : std_logic;
+   signal commandIdle_ss            : std_logic;
 
    -- savestates
    type t_ssarray is array(0 to 1) of unsigned(63 downto 0);
@@ -840,6 +841,7 @@ begin
       poly_start              => poly_start,     
       poly_loading_mode       => poly_loading_mode,     
       sync_full               => commandSyncFull,     
+      ss_idle                 => commandIdle_ss,
 
       -- synthesis translate_off
       export_command_done     => export_command_done, 
@@ -1614,7 +1616,7 @@ begin
 
    -- no command list running, nothing in the pipeline and all pixels written
    SS_idle <= '1' when (DPC_STATUS_dma_busy = '0' and DPC_STATUS_start_pending = '0' and DPC_STATUS_end_pending = '0' and
-                        memState = MEMIDLE and commandIsIdle = '1' and pipe_busy = '0' and writePixelsDone = '1' and
+                        memState = MEMIDLE and commandIdle_ss = '1' and pipe_busy = '0' and writePixelsDone = '1' and
                         cmdDDR3copy_active = '0' and cmdRSPcopy_active = '0') else '0';
    
    process (all)

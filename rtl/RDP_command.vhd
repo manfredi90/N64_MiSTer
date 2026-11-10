@@ -25,6 +25,7 @@ entity RDP_command is
       poly_start              : out std_logic := '0';
       poly_loading_mode       : out std_logic := '0';
       sync_full               : out std_logic := '0';  
+      ss_idle                 : out std_logic;
       
       -- synthesis translate_off
       export_command_done     : out std_logic := '0'; 
@@ -131,6 +132,8 @@ begin
                      '0';
    
    CommandData <= unsigned(cmdfifo_Dout);
+
+   ss_idle <= '1' when (state = IDLE) else '0';
 
    -- synthesis translate_off
    export_command_done <=  '1' when (state = EVALCOMMAND) else '0';                 
