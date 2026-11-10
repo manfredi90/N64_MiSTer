@@ -45,7 +45,7 @@ architecture arch of MI is
    
    -- savestates
    signal ss_in  : std_logic_vector(63 downto 0) := (others => '0');  
-   signal ss_out : std_logic_vector(63 downto 0) := (others => '0');    
+   signal ss_out : std_logic_vector(63 downto 0);    
 
 begin 
 
@@ -148,7 +148,16 @@ begin
 
    SS_idle <= '1';
 
-   ss_out <= (others => '0');
+   process (all)
+   begin
+      ss_out <= (others => '0');
+      ss_out(6 downto 0)   <= MI_MODE_REPEATCOUNT;
+      ss_out(7)            <= MI_MODE_REPEAT;
+      ss_out(8)            <= MI_MODE_EBUS;
+      ss_out(9)            <= MI_MODE_UPPER;
+      ss_out(15)           <= MI_INTR_DP;
+      ss_out(21 downto 16) <= MI_INTR_MASK;
+   end process;
 
    process (clk1x)
    begin

@@ -504,14 +504,24 @@ architecture arch of n64top is
    signal SS_wren                : std_logic_vector(13 downto 0);
    signal SS_wren_93             : std_logic_vector(13 downto 0);
    signal SS_rden                : std_logic_vector(13 downto 0);
-   --signal SS_DataRead_AI         : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_RDP        : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_RSP        : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_MI         : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_PI         : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_PIF        : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_VI         : std_logic_vector(63 downto 0);
-   --signal SS_DataRead_CPU        : std_logic_vector(63 downto 0);
+   signal SS_rden_93             : std_logic_vector(13 downto 0);
+   signal SS_DataRead_AI         : std_logic_vector(63 downto 0);
+   signal SS_DataRead_RDP        : std_logic_vector(63 downto 0);
+   signal SS_DataRead_RSP        : std_logic_vector(63 downto 0);
+   signal SS_DataRead_MI         : std_logic_vector(63 downto 0);
+   signal SS_DataRead_PI         : std_logic_vector(63 downto 0);
+   signal SS_DataRead_SI         : std_logic_vector(63 downto 0);
+   signal SS_DataRead_VI         : std_logic_vector(63 downto 0);
+   signal SS_DataRead_CPU        : std_logic_vector(63 downto 0);
+   signal ss_holdCPU             : std_logic;
+   signal ss_cpuHeld             : std_logic;
+   signal ss_flush               : std_logic;
+   signal ss_flushDone           : std_logic;
+   signal ss_idle_RSP            : std_logic;
+   signal ss_idle_RDP            : std_logic;
+   signal ss_idle_PI             : std_logic;
+   signal ss_idle_SI             : std_logic;
+   signal ss_systemIdle          : std_logic := '0';
    
    signal SS_Idle                : std_logic;  
    --signal SS_idle_cpu            : std_logic;
@@ -698,8 +708,8 @@ begin
       SS_rden_IMEM         => SS_rden(12),
       SS_wren_DMEM         => SS_wren(11),
       SS_rden_DMEM         => SS_rden(11),
-      SS_DataRead          => open, --SS_DataRead_RSP,
-      SS_idle              => open
+      SS_DataRead          => SS_DataRead_RSP,
+      SS_idle              => ss_idle_RSP
    );
    
    rdram_dataWrite(DDR3MUX_RSP) <= (others => '0');
@@ -799,7 +809,8 @@ begin
       SS_Adr               => SS_Adr(0 downto 0),
       SS_wren              => SS_wren(4),
       SS_rden              => SS_rden(4),
-      SS_DataRead          => open --SS_DataRead_RDP
+      SS_DataRead          => SS_DataRead_RDP,
+      SS_idle              => ss_idle_RDP
    );
    
    iRDRAMRegs : entity work.RDRAMRegs
@@ -842,7 +853,7 @@ begin
       SS_DataWrite         => SS_DataWrite,
       SS_wren              => SS_wren(1),
       SS_rden              => SS_rden(1),
-      SS_DataRead          => open --SS_DataRead_MI
+      SS_DataRead          => SS_DataRead_MI
    );    
    
    iVI : entity work.VI
@@ -930,7 +941,7 @@ begin
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(9),
       SS_rden              => SS_rden(9),
-      SS_DataRead          => open --SS_DataRead_VI
+      SS_DataRead          => SS_DataRead_VI
    );   
    
    iAI : entity work.AI
@@ -970,7 +981,7 @@ begin
       SS_Adr               => SS_Adr(1 downto 0),   
       SS_wren              => SS_wren(0),     
       SS_rden              => SS_rden(0),            
-      SS_DataRead          => open --SS_DataRead_AI      
+      SS_DataRead          => SS_DataRead_AI
    );   
    
    iRI : entity work.RI
@@ -1022,7 +1033,15 @@ begin
       rdram_writeMask      => rdram_writeMask(DDR3MUX_SI), 
       rdram_dataWrite      => rdram_dataWrite(DDR3MUX_SI), 
       rdram_done           => rdram_done(DDR3MUX_SI),      
-      rdram_dataRead       => rdram_dataRead 
+      rdram_dataRead       => rdram_dataRead,
+      
+      SS_reset             => ss_reset_1x,
+      SS_DataWrite         => SS_DataWrite,
+      SS_Adr               => SS_Adr(2 downto 0),
+      SS_wren              => SS_wren(8),
+      SS_rden              => SS_rden(8),
+      SS_DataRead          => SS_DataRead_SI,
+      SS_idle              => ss_idle_SI
    );
    
    iPI : entity work.PI
@@ -1100,7 +1119,8 @@ begin
       SS_Adr               => SS_Adr(2 downto 0),
       SS_wren              => SS_wren(2),
       SS_rden              => SS_rden(2),
-      SS_DataRead          => open --SS_DataRead_PI
+      SS_DataRead          => SS_DataRead_PI,
+      SS_idle              => ss_idle_PI
    );
    
    process(clk1x)
@@ -1674,10 +1694,22 @@ begin
       SS_DataWrite         => SS_DataWrite_93,
       SS_Adr               => SS_Adr_93(11 downto 0),   
       SS_wren_CPU          => SS_wren_93(10),     
-      SS_rden_CPU          => SS_rden(10),            
-      SS_DataRead_CPU      => open, --SS_DataRead_CPU,
-      SS_idle              => open --SS_idle_cpu
+      SS_rden_CPU          => SS_rden_93(10),            
+      SS_DataRead_CPU      => SS_DataRead_CPU,
+      SS_idle              => open, --SS_idle_cpu
+      
+      ss_holdIRQ           => ss_holdCPU,
+      ss_cpuHeld           => ss_cpuHeld,
+      ss_flush             => ss_flush,
+      ss_flushDone         => ss_flushDone
    );
+   
+   process (clk1x)
+   begin
+      if (rising_edge(clk1x)) then
+         ss_systemIdle <= ss_idle_RSP and ss_idle_RDP and ss_idle_PI and ss_idle_SI and sdrammux_idle;
+      end if;
+   end process;
    
    SS_idle <= '1';
    
@@ -1716,15 +1748,29 @@ begin
       system_paused           => '1',
       savestate_pause         => savestate_pause,
       
+      ss_holdCPU              => ss_holdCPU,
+      ss_cpuHeld              => ss_cpuHeld,
+      ss_flush                => ss_flush,
+      ss_flushDone            => ss_flushDone,
+      ss_systemIdle           => ss_systemIdle,
+      
       SS_DataWrite            => SS_DataWrite,   
       SS_Adr                  => SS_Adr,         
       SS_wren                 => SS_wren,       
       SS_rden                 => SS_rden,       
-      SS_DataRead_CPU         => (63 downto 0 => '0'),
+      SS_DataRead_AI          => SS_DataRead_AI,
+      SS_DataRead_MI          => SS_DataRead_MI,
+      SS_DataRead_PI          => SS_DataRead_PI,
+      SS_DataRead_RDP         => SS_DataRead_RDP,
+      SS_DataRead_RSP         => SS_DataRead_RSP,
+      SS_DataRead_SI          => SS_DataRead_SI,
+      SS_DataRead_VI          => SS_DataRead_VI,
+      SS_DataRead_CPU         => SS_DataRead_CPU,
       
       SS_DataWrite_93         => SS_DataWrite_93,
       SS_Adr_93               => SS_Adr_93,      
       SS_wren_93              => SS_wren_93,     
+      SS_rden_93              => SS_rden_93,
 
       loading_savestate       => loading_savestate,
       saving_savestate        => open,

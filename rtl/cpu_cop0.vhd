@@ -102,7 +102,13 @@ entity cpu_cop0 is
       SS_DataWrite            : in  std_logic_vector(63 downto 0);
       SS_Adr                  : in  unsigned(11 downto 0);
       SS_wren_CPU             : in  std_logic;
-      SS_rden_CPU             : in  std_logic
+      SS_rden_CPU             : in  std_logic;
+      SS_DataRead_COP0        : out std_logic_vector(63 downto 0) := (others => '0');
+      
+      -- save: instead of taking the next interrupt, wait here with the interrupt pending
+      ss_holdIRQ              : in  std_logic;
+      ss_irqHeld              : out std_logic := '0';
+      ss_heldPC               : out unsigned(63 downto 0)
    );
 end entity;
 
@@ -325,6 +331,10 @@ architecture arch of cpu_cop0 is
    -- savestates
    type t_ssarray is array(0 to 31) of unsigned(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
+   signal ss_out : t_ssarray;
+   
+   signal ss_irqHeld_i                    : std_logic := '0';
+   signal ss_TLBreadData                  : std_logic_vector(100 downto 0);
 
 begin 
 
@@ -527,28 +537,28 @@ begin
       
          if (reset = '1') then
          
-            COP0_0_INDEX_tlbEntry           <= (others => '0');
-            COP0_0_INDEX_probefailure       <= '0';
+            COP0_0_INDEX_tlbEntry           <= ss_in(0)(5 downto 0);
+            COP0_0_INDEX_probefailure       <= ss_in(0)(31);
             COP0_1_RANDOM                   <= (others => '0');
-            COP0_2_ENTRYLO0_phyAdr          <= (others => '0');
-            COP0_2_ENTRYLO0_cache           <= (others => '0');
-            COP0_2_ENTRYLO0_dirty           <= '0';       
-            COP0_2_ENTRYLO0_valid           <= '0';       
-            COP0_2_ENTRYLO0_global          <= '0';
-            COP0_3_ENTRYLO1_phyAdr          <= (others => '0');
-            COP0_3_ENTRYLO1_cache           <= (others => '0');
-            COP0_3_ENTRYLO1_dirty           <= '0';       
-            COP0_3_ENTRYLO1_valid           <= '0';       
-            COP0_3_ENTRYLO1_global          <= '0';
-            COP0_4_CONTEXT_PTE              <= (others => '0');
-            COP0_4_CONTEXT_BADVPN           <= (others => '0');
-            COP0_5_PAGEMASK                 <= (others => '0');
+            COP0_2_ENTRYLO0_phyAdr          <= ss_in(2)(29 downto 6);
+            COP0_2_ENTRYLO0_cache           <= ss_in(2)(5 downto 3);
+            COP0_2_ENTRYLO0_dirty           <= ss_in(2)(2);       
+            COP0_2_ENTRYLO0_valid           <= ss_in(2)(1);       
+            COP0_2_ENTRYLO0_global          <= ss_in(2)(0);
+            COP0_3_ENTRYLO1_phyAdr          <= ss_in(3)(29 downto 6);
+            COP0_3_ENTRYLO1_cache           <= ss_in(3)(5 downto 3);
+            COP0_3_ENTRYLO1_dirty           <= ss_in(3)(2);       
+            COP0_3_ENTRYLO1_valid           <= ss_in(3)(1);       
+            COP0_3_ENTRYLO1_global          <= ss_in(3)(0);
+            COP0_4_CONTEXT_PTE              <= ss_in(4)(63 downto 23);
+            COP0_4_CONTEXT_BADVPN           <= ss_in(4)(22 downto 4);
+            COP0_5_PAGEMASK                 <= ss_in(5)(24 downto 13);
             COP0_6_WIRED                    <= ss_in(6)(5 downto 0); -- (others => '0');
-            COP0_8_BADVIRTUALADDRESS        <= (others => '0');
+            COP0_8_BADVIRTUALADDRESS        <= ss_in(8);
             COP0_9_COUNT                    <= ss_in(9)(31 downto 0) & '0'; -- (others => '0');
-            COP0_10_ENTRYHI_addressSpaceID  <= (others => '0'); 
-            COP0_10_ENTRYHI_virtualAddress  <= (others => '0'); 
-            COP0_10_ENTRYHI_region          <= (others => '0'); 
+            COP0_10_ENTRYHI_addressSpaceID  <= ss_in(10)(7 downto 0); 
+            COP0_10_ENTRYHI_virtualAddress  <= ss_in(10)(39 downto 13); 
+            COP0_10_ENTRYHI_region          <= ss_in(10)(63 downto 62); 
             COP0_11_COMPARE                 <= ss_in(11)(31 downto 0); -- (others => '0');
             COP0_12_SR_interruptEnable      <= ss_in(12)(0);           -- '0';
             COP0_12_SR_exceptionLevel       <= ss_in(12)(1);           -- '0';
@@ -573,25 +583,25 @@ begin
             COP0_12_SR_enable_cop2          <= ss_in(12)(30);          -- '0';
             COP0_12_SR_enable_cop3          <= ss_in(12)(31);          -- '0';
             COP0_13_CAUSE_exceptionCode     <= (others => '0'); 
-            COP0_13_CAUSE_interruptPending  <= (others => '0'); 
+            COP0_13_CAUSE_interruptPending  <= ss_in(13)(15 downto 8); -- software and timer interrupts, the others follow their sources
             COP0_13_CAUSE_coprocessorError  <= (others => '0'); 
             COP0_13_CAUSE_branchDelay       <= ss_in(13)(31);          -- '0'
-            COP0_14_EPC                     <= 32x"0" & ss_in(14)(31 downto 0); -- (others => '0'); will not work for savestates with TLB
+            COP0_14_EPC                     <= ss_in(14);
             COP0_16_CONFIG_cacheAlgoKSEG0   <= ss_in(16)(1 downto 0); -- (others => '0'); required for systemtest
             COP0_16_CONFIG_cu               <= (others => '0'); 
             COP0_16_CONFIG_bigEndian        <= '1';
             COP0_16_CONFIG_sysadWBPattern   <= (others => '0'); 
             COP0_16_CONFIG_systemClockRatio <= (others => '1'); 
-            COP0_17_LOADLINKEDADDRESS       <= (others => '0'); 
+            COP0_17_LOADLINKEDADDRESS       <= ss_in(17); 
             COP0_18_WATCHLO                 <= (others => '0');   
             COP0_19_WATCHHI                 <= (others => '0');   
-            COP0_20_XCONTEXT_PTE            <= (others => '0');
-            COP0_20_XCONTEXT_Region         <= (others => '0');
-            COP0_20_XCONTEXT_BadVPN         <= (others => '0');
+            COP0_20_XCONTEXT_PTE            <= ss_in(20)(63 downto 33);
+            COP0_20_XCONTEXT_Region         <= ss_in(20)(32 downto 31);
+            COP0_20_XCONTEXT_BadVPN         <= ss_in(20)(30 downto 4);
             COP0_26_PARITYERROR             <= (others => '0');  
-            COP0_28_TAGLO_primaryCacheState <= (others => '0');     
-            COP0_28_TAGLO_physicalAddress   <= (others => '0');     
-            COP0_30_EPCERROR                <= (others => '0'); 
+            COP0_28_TAGLO_primaryCacheState <= ss_in(28)(7 downto 6);     
+            COP0_28_TAGLO_physicalAddress   <= ss_in(28)(27 downto 8);     
+            COP0_30_EPCERROR                <= ss_in(30); 
             
             COP0_LATCH                      <= (others => '0'); 
             
@@ -607,6 +617,8 @@ begin
             TLB_Data_fetchReq_saved         <= '0';
             tlbMiss1                        <= '0';
             tlbMiss3                        <= '0';
+            
+            ss_irqHeld_i                    <= '0';
             
          elsif (ce = '1') then
          
@@ -816,9 +828,11 @@ begin
             if (stall = 0) then
                exception       <= '0';
                exceptionStage1 <= '0';
-               nextEPC_1       <= nextEPC;
-               isDelaySlot_1   <= isDelaySlot;
-               if (exception = '0' and exceptionStage1 = '1') then
+               if (ss_irqHeld_i = '0') then
+                  nextEPC_1       <= nextEPC;
+                  isDelaySlot_1   <= isDelaySlot;
+               end if;
+               if (exception = '0' and exceptionStage1 = '1' and ss_irqHeld_i = '0') then
                   COP0_13_CAUSE_coprocessorError <= "00";
                   COP0_13_CAUSE_exceptionCode    <= '0' & x"2";
                   COP0_14_EPC                  <= TLB_Instr_fetchAddrIn;
@@ -830,7 +844,7 @@ begin
                end if;
             end if;
             
-            if (TLB_ExcInstrRead = '1') then
+            if (TLB_ExcInstrRead = '1' and ss_irqHeld_i = '0') then
                exceptionStage1            <= '1';
                tlbMiss1                   <= TLB_ExcInstrMiss;
                COP0_12_SR_exceptionLevel  <= '1';
@@ -841,8 +855,13 @@ begin
                
                   tlbMiss3 <= '0';
                
-                  if (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
+                  if (decode_irq = '1' and ss_holdIRQ = '1' and exceptionFPU = '0' and exception3 = '0' and TLB_ExcDataRead = '0' and TLB_ExcDataWrite = '0' and TLB_ExcDataDirty = '0') then
                   
+                     ss_irqHeld_i <= '1';
+                  
+                  elsif (decode_irq = '1' or exceptionFPU = '1' or exception3 = '1' or TLB_ExcDataRead = '1' or TLB_ExcDataWrite = '1' or TLB_ExcDataDirty = '1') then
+                  
+                     ss_irqHeld_i <= '0';
                      exception <= '1';
                      COP0_12_SR_exceptionLevel   <= '1';
                      COP0_13_CAUSE_coprocessorError <= "00";
@@ -885,7 +904,7 @@ begin
                excAddr   := TLB_Data_fetchAddrIn;
             end if;
             
-            if (TLB_ExcInstrRead = '1') then
+            if (TLB_ExcInstrRead = '1' and ss_irqHeld_i = '0') then
                excAddrWE := '1';
                excAddr   := TLB_Instr_fetchAddrIn; 
             end if;
@@ -1305,6 +1324,117 @@ begin
             ss_in(to_integer(SS_Adr(4 downto 0))) <= unsigned(SS_DataWrite);
          end if;
       
+      end if;
+   end process;
+   
+   ss_irqHeld <= ss_irqHeld_i;
+   ss_heldPC  <= nextEPC_1;
+   
+   -- same layout as the load above
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(5 downto 0)    <= COP0_0_INDEX_tlbEntry;
+      ss_out(0)(31)            <= COP0_0_INDEX_probefailure;
+      ss_out(2)(29 downto 6)   <= COP0_2_ENTRYLO0_phyAdr;
+      ss_out(2)(5 downto 3)    <= COP0_2_ENTRYLO0_cache;
+      ss_out(2)(2)             <= COP0_2_ENTRYLO0_dirty;
+      ss_out(2)(1)             <= COP0_2_ENTRYLO0_valid;
+      ss_out(2)(0)             <= COP0_2_ENTRYLO0_global;
+      ss_out(3)(29 downto 6)   <= COP0_3_ENTRYLO1_phyAdr;
+      ss_out(3)(5 downto 3)    <= COP0_3_ENTRYLO1_cache;
+      ss_out(3)(2)             <= COP0_3_ENTRYLO1_dirty;
+      ss_out(3)(1)             <= COP0_3_ENTRYLO1_valid;
+      ss_out(3)(0)             <= COP0_3_ENTRYLO1_global;
+      ss_out(4)(63 downto 23)  <= COP0_4_CONTEXT_PTE;
+      ss_out(4)(22 downto 4)   <= COP0_4_CONTEXT_BADVPN;
+      ss_out(5)(24 downto 13)  <= COP0_5_PAGEMASK;
+      ss_out(6)(5 downto 0)    <= COP0_6_WIRED;
+      ss_out(8)                <= COP0_8_BADVIRTUALADDRESS;
+      ss_out(9)(31 downto 0)   <= COP0_9_COUNT(32 downto 1);
+      ss_out(10)(7 downto 0)   <= COP0_10_ENTRYHI_addressSpaceID;
+      ss_out(10)(39 downto 13) <= COP0_10_ENTRYHI_virtualAddress;
+      ss_out(10)(63 downto 62) <= COP0_10_ENTRYHI_region;
+      ss_out(11)(31 downto 0)  <= COP0_11_COMPARE;
+      ss_out(12)(0)            <= COP0_12_SR_interruptEnable;
+      ss_out(12)(1)            <= COP0_12_SR_exceptionLevel;
+      ss_out(12)(2)            <= COP0_12_SR_errorLevel;
+      ss_out(12)(4 downto 3)   <= COP0_12_SR_privilegeMode;
+      ss_out(12)(5)            <= COP0_12_SR_userExtendedAddr;
+      ss_out(12)(6)            <= COP0_12_SR_supervisorAddr;
+      ss_out(12)(7)            <= COP0_12_SR_kernelExtendedAddr;
+      ss_out(12)(15 downto 8)  <= COP0_12_SR_interruptMask;
+      ss_out(12)(16)           <= COP0_12_SR_de;
+      ss_out(12)(17)           <= COP0_12_SR_ce;
+      ss_out(12)(18)           <= COP0_12_SR_condition;
+      ss_out(12)(20)           <= COP0_12_SR_softReset;
+      ss_out(12)(21)           <= COP0_12_SR_tlbShutdown;
+      ss_out(12)(22)           <= COP0_12_SR_vectorLocation;
+      ss_out(12)(24)           <= COP0_12_SR_instructionTracing;
+      ss_out(12)(25)           <= COP0_12_SR_reverseEndian;
+      ss_out(12)(26)           <= COP0_12_SR_floatingPointMode;
+      ss_out(12)(27)           <= COP0_12_SR_lowPowerMode;
+      ss_out(12)(28)           <= COP0_12_SR_enable_cop0;
+      ss_out(12)(29)           <= COP0_12_SR_enable_cop1;
+      ss_out(12)(30)           <= COP0_12_SR_enable_cop2;
+      ss_out(12)(31)           <= COP0_12_SR_enable_cop3;
+      ss_out(13)(15 downto 8)  <= COP0_13_CAUSE_interruptPending;
+      ss_out(13)(31)           <= COP0_13_CAUSE_branchDelay;
+      ss_out(14)               <= COP0_14_EPC;
+      ss_out(16)(1 downto 0)   <= COP0_16_CONFIG_cacheAlgoKSEG0;
+      ss_out(17)               <= COP0_17_LOADLINKEDADDRESS;
+      ss_out(20)(63 downto 33) <= COP0_20_XCONTEXT_PTE;
+      ss_out(20)(32 downto 31) <= COP0_20_XCONTEXT_Region;
+      ss_out(20)(30 downto 4)  <= COP0_20_XCONTEXT_BadVPN;
+      ss_out(28)(7 downto 6)   <= COP0_28_TAGLO_primaryCacheState;
+      ss_out(28)(27 downto 8)  <= COP0_28_TAGLO_physicalAddress;
+      ss_out(30)               <= COP0_30_EPCERROR;
+   end process;
+   
+   -- copy of the TLB entries, read only for savestates
+   iTLBMEM_SS : entity mem.RamMLAB
+	GENERIC MAP 
+   (
+      width      => 101,
+      widthad    => 5
+	)
+	PORT MAP (
+      inclock    => clk93,
+      wren       => TLBMEM_writeEnable,
+      data       => TLBMEM_writeData,
+      wraddress  => TLBMEM_writeAddr,
+      rdaddress  => std_logic_vector(SS_Adr(5 downto 1)),
+      q          => ss_TLBreadData
+	);
+   
+   -- cop0 registers at 64..95, TLB entries at 256..319, in the format of the load path
+   process (clk93)
+   begin
+      if (rising_edge(clk93)) then
+         if (SS_rden_CPU = '1') then
+            SS_DataRead_COP0 <= (others => '0');
+            if (SS_Adr >= 64 and SS_Adr < 96) then
+               SS_DataRead_COP0 <= std_logic_vector(ss_out(to_integer(SS_Adr(4 downto 0))));
+            elsif (SS_Adr >= 256 and SS_Adr < 320) then
+               if (SS_Adr(0) = '0') then
+                  SS_DataRead_COP0(19 downto  0) <= ss_TLBreadData(30 downto 11); -- phyAddr0
+                  SS_DataRead_COP0(51 downto 32) <= ss_TLBreadData(50 downto 31); -- phyAddr1
+                  SS_DataRead_COP0(60 downto 58) <= ss_TLBreadData( 7 downto  5); -- cache0
+                  SS_DataRead_COP0(63 downto 61) <= ss_TLBreadData(10 downto  8); -- cache1
+               else
+                  SS_DataRead_COP0(26 downto  0) <= ss_TLBreadData(89 downto 63); -- virtAddr
+                  SS_DataRead_COP0(39 downto 32) <= ss_TLBreadData(97 downto 90); -- ASID
+                  SS_DataRead_COP0(51 downto 40) <= ss_TLBreadData(62 downto 51); -- pageMask
+                  SS_DataRead_COP0(55 downto 54) <= ss_TLBreadData(99 downto 98); -- region
+                  SS_DataRead_COP0(56)           <= ss_TLBreadData(0);            -- global
+                  SS_DataRead_COP0(57)           <= ss_TLBreadData(1);            -- valid0
+                  SS_DataRead_COP0(58)           <= ss_TLBreadData(2);            -- valid1
+                  SS_DataRead_COP0(59)           <= ss_TLBreadData(3);            -- dirty0
+                  SS_DataRead_COP0(60)           <= ss_TLBreadData(4);            -- dirty1
+                  SS_DataRead_COP0(61)           <= ss_TLBreadData(100);          -- random
+               end if;
+            end if;
+         end if;
       end if;
    end process;
 

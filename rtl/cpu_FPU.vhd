@@ -39,7 +39,8 @@ entity cpu_FPU is
       FPUWriteMask      : out std_logic_vector(1 downto 0) := (others => '0');
       
       SS_FPU_CF         : in  std_logic;
-      SS_CSR            : in  unsigned(24 downto 0)
+      SS_CSR            : in  unsigned(24 downto 0);
+      SS_CSR_out        : out unsigned(24 downto 0)
    );
 end entity;
 
@@ -284,6 +285,7 @@ begin
    -- synthesis translate_on
    
    FPU_CF <= csr_compare;
+   SS_CSR_out <= csr;
    
 
    bit64   <= command_code(21);

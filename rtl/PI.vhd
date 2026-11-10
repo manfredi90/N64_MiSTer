@@ -195,7 +195,7 @@ architecture arch of PI is
    -- savestates
    type t_ssarray is array(0 to 7) of std_logic_vector(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
-   signal ss_out : t_ssarray := (others => (others => '0'));     
+   signal ss_out : t_ssarray;     
 
 begin 
 
@@ -978,7 +978,24 @@ begin
 --############################### savestates
 --##############################################################
 
-   SS_idle <= '1';
+   SS_idle <= '1' when (PI_STATUS_DMAbusy = '0' and PI_STATUS_IObusy = '0') else '0';
+   
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(56)           <= PI_STATUS_DMAbusy;
+      ss_out(0)(57)           <= PI_STATUS_IObusy;
+      ss_out(0)(58)           <= PI_STATUS_DMAerror;
+      ss_out(0)(59)           <= PI_STATUS_irq;
+      ss_out(2)( 7 downto  0) <= std_logic_vector(PI_BSD_DOM1_LAT);
+      ss_out(2)(15 downto  8) <= std_logic_vector(PI_BSD_DOM1_PWD);
+      ss_out(2)(19 downto 16) <= std_logic_vector(PI_BSD_DOM1_PGS);
+      ss_out(2)(21 downto 20) <= std_logic_vector(PI_BSD_DOM1_RLS);
+      ss_out(2)(29 downto 22) <= std_logic_vector(PI_BSD_DOM2_LAT);
+      ss_out(2)(37 downto 30) <= std_logic_vector(PI_BSD_DOM2_PWD);
+      ss_out(2)(41 downto 38) <= std_logic_vector(PI_BSD_DOM2_PGS);
+      ss_out(2)(43 downto 42) <= std_logic_vector(PI_BSD_DOM2_RLS);
+   end process;
 
    process (clk1x)
    begin

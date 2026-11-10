@@ -97,7 +97,7 @@ architecture arch of AI is
    -- savestates
    type t_ssarray is array(0 to 3) of std_logic_vector(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
-   signal ss_out : t_ssarray := (others => (others => '0'));     
+   signal ss_out : t_ssarray;     
 
 begin 
 
@@ -120,7 +120,7 @@ begin
             bus_read_latch       <= '0';
             bus_write_latch      <= '0';
             bus_done             <= '0';
-            irq_out              <= '0';
+            irq_out              <= ss_in(1)(46);
 
             AI_DRAM_ADDR         <= unsigned(ss_in(0)(23 downto  3)) & "000"; -- (others => '0');
             AI_LEN               <= unsigned(ss_in(0)(41 downto 27)) & "000"; -- (others => '0');
@@ -357,6 +357,20 @@ begin
 --##############################################################
 
    SS_idle <= '1';
+   
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(23 downto  3) <= std_logic_vector(AI_DRAM_ADDR(23 downto 3));
+      ss_out(0)(41 downto 27) <= std_logic_vector(AI_LEN(17 downto 3));
+      ss_out(0)(55 downto 42) <= std_logic_vector(AI_DACRATE);
+      ss_out(1)(23 downto  0) <= std_logic_vector(AI_DRAM_ADDR_next);
+      ss_out(1)(41 downto 27) <= std_logic_vector(AI_LEN_next(17 downto 3));
+      ss_out(1)(42)           <= AI_CONTROL_DMAON;
+      ss_out(1)(43)           <= carry;
+      ss_out(1)(45 downto 44) <= std_logic_vector(to_unsigned(fillcount, 2));
+      ss_out(1)(46)           <= irq_out;
+   end process;
 
    process (clk1x)
    begin

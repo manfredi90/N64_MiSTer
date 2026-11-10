@@ -353,7 +353,7 @@ architecture arch of RDP is
    -- savestates
    type t_ssarray is array(0 to 1) of unsigned(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
-   signal ss_out : t_ssarray := (others => (others => '0')); 
+   signal ss_out : t_ssarray; 
 
    --export
    -- synthesis translate_off
@@ -1612,7 +1612,26 @@ begin
 --############################### savestates
 --##############################################################
 
-   SS_idle <= '1';
+   -- no command list running, nothing in the pipeline and all pixels written
+   SS_idle <= '1' when (DPC_STATUS_dma_busy = '0' and DPC_STATUS_start_pending = '0' and DPC_STATUS_end_pending = '0' and
+                        memState = MEMIDLE and commandIsIdle = '1' and pipe_busy = '0' and writePixelsDone = '1' and
+                        cmdDDR3copy_active = '0' and cmdRSPcopy_active = '0') else '0';
+   
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(23 downto  0) <= DPC_START_NEXT;
+      ss_out(0)(47 downto 24) <= DPC_END_NEXT;
+      ss_out(0)(48)           <= DPC_STATUS_xbus_dmem_dma;
+      ss_out(0)(49)           <= DPC_STATUS_freeze;
+      ss_out(0)(50)           <= DPC_STATUS_flush;
+      ss_out(0)(51)           <= DPC_STATUS_start_gclk;
+      ss_out(0)(52)           <= DPC_STATUS_cbuf_ready;
+      ss_out(0)(53)           <= DPC_STATUS_dma_busy;
+      ss_out(0)(54)           <= DPC_STATUS_end_pending;
+      ss_out(0)(55)           <= DPC_STATUS_start_pending;
+      ss_out(1)(23 downto  0) <= DPC_CURRENT;
+   end process;
 
    process (clk1x)
    begin

@@ -38,7 +38,16 @@ entity SI is
       rdram_writeMask  : out std_logic_vector(7 downto 0) := (others => '0'); 
       rdram_dataWrite  : out std_logic_vector(63 downto 0) := (others => '0');
       rdram_done       : in  std_logic;
-      rdram_dataRead   : in  std_logic_vector(63 downto 0)
+      rdram_dataRead   : in  std_logic_vector(63 downto 0);
+      
+      -- savestates
+      SS_reset         : in  std_logic;
+      SS_DataWrite     : in  std_logic_vector(63 downto 0);
+      SS_Adr           : in  unsigned(2 downto 0);
+      SS_wren          : in  std_logic;
+      SS_rden          : in  std_logic;
+      SS_DataRead      : out std_logic_vector(63 downto 0) := (others => '0');
+      SS_idle          : out std_logic
    );
 end entity;
 
@@ -81,6 +90,11 @@ architecture arch of SI is
    signal pifIndex               : unsigned(5 downto 0) := (others => '0');
    signal dataLatch              : std_logic_vector(63 downto 0) := (others => '0');
    signal piframCheck            : unsigned(10 downto 0) := (others => '0');
+   
+   -- savestates
+   type t_ssarray is array(0 to 7) of std_logic_vector(63 downto 0);
+   signal ss_in  : t_ssarray := (others => (others => '0'));  
+   signal ss_out : t_ssarray;
 
 begin 
 
@@ -99,7 +113,7 @@ begin
             
             bus_done                <= '0';
             
-            SI_DRAM_ADDR            <= (others => '0');
+            SI_DRAM_ADDR            <= unsigned(ss_in(0)(23 downto 0));
             SI_PIF_ADDR_RD64B       <= (others => '0');
             SI_PIF_ADDR_WR64B       <= (others => '0');
             SI_STATUS_DMA_busy      <= '0';
@@ -108,7 +122,7 @@ begin
             SI_STATUS_DMA_error     <= '0';
             SI_STATUS_pchState      <= (others => '0');
             SI_STATUS_dmaState      <= (others => '0');
-            SI_STATUS_IRQ           <= '0';
+            SI_STATUS_IRQ           <= ss_in(0)(24);
             
             state                   <= IDLE;
             SIPIF_ramreq            <= '0';
@@ -285,6 +299,38 @@ begin
             end case;
 
          end if;
+      end if;
+   end process;
+
+--##############################################################
+--############################### savestates
+--##############################################################
+
+   SS_idle <= '1' when (state = IDLE and SI_STATUS_DMA_busy = '0' and SI_STATUS_IO_busy = '0') else '0';
+   
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(23 downto 0) <= std_logic_vector(SI_DRAM_ADDR);
+      ss_out(0)(24)          <= SI_STATUS_IRQ;
+   end process;
+
+   process (clk1x)
+   begin
+      if (rising_edge(clk1x)) then
+      
+         if (SS_reset = '1') then
+            for i in 0 to 7 loop
+               ss_in(i) <= (others => '0');
+            end loop;
+         elsif (SS_wren = '1') then
+            ss_in(to_integer(SS_Adr)) <= SS_DataWrite;
+         end if;
+         
+         if (SS_rden = '1') then
+            SS_DataRead <= ss_out(to_integer(SS_Adr));
+         end if;
+      
       end if;
    end process;
 

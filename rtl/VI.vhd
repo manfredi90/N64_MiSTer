@@ -151,7 +151,7 @@ architecture arch of VI is
    -- savestates
    type t_ssarray is array(0 to 7) of std_logic_vector(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
-   signal ss_out : t_ssarray := (others => (others => '0')); 
+   signal ss_out : t_ssarray; 
 
 begin 
 
@@ -162,7 +162,7 @@ begin
          if (reset_1x = '1') then
             
             bus_done             <= '0';
-            irq_out              <= '0';
+            irq_out              <= ss_in(7)(0);
 
             VI_CTRL_TYPE                   <= unsigned(ss_in(0)(1 downto 0));  
             VI_CTRL_GAMMA_DITHER_ENABLE    <= ss_in(0)(2);
@@ -471,6 +471,49 @@ begin
 --##############################################################
 --############################### savestates
 --##############################################################
+
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)( 1 downto  0) <= std_logic_vector(VI_CTRL_TYPE);
+      ss_out(0)(2)            <= VI_CTRL_GAMMA_DITHER_ENABLE;
+      ss_out(0)(3)            <= VI_CTRL_GAMMA_ENABLE;
+      ss_out(0)(4)            <= VI_CTRL_DIVOT_ENABLE;
+      ss_out(0)(5)            <= VI_CTRL_VBUS_CLOCK_ENABLE;
+      ss_out(0)(6)            <= VI_CTRL_SERRATE;
+      ss_out(0)(7)            <= VI_CTRL_TEST_MODE;
+      ss_out(0)( 9 downto  8) <= std_logic_vector(VI_CTRL_AA_MODE);
+      ss_out(0)(10)           <= VI_CTRL_Reserved10;
+      ss_out(0)(11)           <= VI_CTRL_KILL_WE;
+      ss_out(0)(15 downto 12) <= std_logic_vector(VI_CTRL_PIXEL_ADVANCE);
+      ss_out(0)(39 downto 16) <= std_logic_vector(VI_ORIGIN);
+      ss_out(0)(51 downto 40) <= std_logic_vector(VI_WIDTH);
+      ss_out(0)(61 downto 52) <= std_logic_vector(VI_INTR);
+      ss_out(0)(62)           <= VI_CTRL_DEDITHER_FILTER_ENABLE;
+      ss_out(1)( 9 downto  0) <= std_logic_vector(VI_CURRENT);
+      ss_out(1)(17 downto 10) <= std_logic_vector(VI_HSYNC_WIDTH);
+      ss_out(1)(25 downto 18) <= std_logic_vector(VI_BURST_BURSTWIDTH);
+      ss_out(1)(29 downto 26) <= std_logic_vector(VI_VSYNC_WIDTH);
+      ss_out(1)(39 downto 30) <= std_logic_vector(VI_BURST_START);
+      ss_out(1)(49 downto 40) <= std_logic_vector(VI_V_SYNC);
+      ss_out(1)(56 downto 50) <= std_logic_vector(VI_TEST_ADDR);
+      ss_out(2)(11 downto  0) <= std_logic_vector(VI_H_SYNC_LENGTH);
+      ss_out(2)(20 downto 16) <= std_logic_vector(VI_H_SYNC_LEAP);
+      ss_out(2)(32 downto 21) <= std_logic_vector(VI_LEAP_A);
+      ss_out(2)(48 downto 37) <= std_logic_vector(VI_LEAP_B);
+      ss_out(3)( 9 downto  0) <= std_logic_vector(VI_H_VIDEO_END);
+      ss_out(3)(25 downto 16) <= std_logic_vector(VI_H_VIDEO_START);
+      ss_out(3)(35 downto 26) <= std_logic_vector(VI_V_VIDEO_END);
+      ss_out(3)(51 downto 42) <= std_logic_vector(VI_V_VIDEO_START);
+      ss_out(4)( 9 downto  0) <= std_logic_vector(VI_V_BURST_END);
+      ss_out(4)(25 downto 16) <= std_logic_vector(VI_V_BURST_START);
+      ss_out(4)(63 downto 32) <= std_logic_vector(VI_STAGED_DATA);
+      ss_out(5)(11 downto  0) <= std_logic_vector(VI_X_SCALE_FACTOR);
+      ss_out(5)(27 downto 16) <= std_logic_vector(VI_X_SCALE_OFFSET);
+      ss_out(5)(43 downto 32) <= std_logic_vector(VI_Y_SCALE_FACTOR);
+      ss_out(5)(59 downto 48) <= std_logic_vector(VI_Y_SCALE_OFFSET);
+      ss_out(7)(0)            <= irq_out;
+   end process;
 
    process (clk1x)
    begin

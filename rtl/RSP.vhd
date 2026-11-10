@@ -204,7 +204,9 @@ architecture arch of RSP is
    -- savestates
    type t_ssarray is array(0 to 3) of std_logic_vector(63 downto 0);
    signal ss_in  : t_ssarray := (others => (others => '0'));  
-   signal ss_out : t_ssarray := (others => (others => '0'));  
+   signal ss_out : t_ssarray;
+   signal ss_rdSel  : std_logic_vector(1 downto 0) := "00";
+   signal ss_rdData : std_logic_vector(63 downto 0) := (others => '0');
    
    signal ss_reg_we     : std_logic := '0';
    signal ss_vreg_we    : std_logic := '0';
@@ -277,7 +279,7 @@ begin
             SP_DMA_CURRENT_COUNT       <= (others => '0');
             SP_DMA_CURRENT_SKIP        <= (others => '0');
             
-            irq_out                    <= '0';
+            irq_out                    <= ss_in(1)(38);
             
             bus_reg_req_read           <= '0';
             bus_reg_req_write          <= '0';
@@ -808,8 +810,51 @@ begin
 --############################### savestates
 --##############################################################
 
-   SS_DataRead <= (others => '0');
-   SS_idle     <= '1';
+   -- halted and no DMA running or queued
+   SS_idle <= '1' when (SP_STATUS_halt = '1' and SP_STATUS_dmabusy = '0' and SP_STATUS_dmafull = '0' and MEMSTATE = MEM_IDLE and DMASTATE = DMA_IDLE and fifoout_empty = '1') else '0';
+   
+   process (all)
+   begin
+      ss_out <= (others => (others => '0'));
+      ss_out(0)(38)           <= SP_STATUS_broke;
+      ss_out(0)(42)           <= SP_STATUS_singlestep;
+      ss_out(0)(43)           <= SP_STATUS_irqonbreak;
+      ss_out(0)(44)           <= SP_STATUS_signal0set;
+      ss_out(0)(45)           <= SP_STATUS_signal1set;
+      ss_out(0)(46)           <= SP_STATUS_signal2set;
+      ss_out(0)(47)           <= SP_STATUS_signal3set;
+      ss_out(0)(48)           <= SP_STATUS_signal4set;
+      ss_out(0)(49)           <= SP_STATUS_signal5set;
+      ss_out(0)(50)           <= SP_STATUS_signal6set;
+      ss_out(0)(51)           <= SP_STATUS_signal7set;
+      ss_out(0)(63 downto 52) <= std_logic_vector(SP_PC);
+      ss_out(1)(37)           <= SP_SEMAPHORE;
+      ss_out(1)(38)           <= irq_out;
+   end process;
+   
+   -- registers are read here, IMEM/DMEM through port A, which follows SS_Adr while the system is paused
+   process (clk1x)
+   begin
+      if (rising_edge(clk1x)) then
+         if (SS_rden_RSP = '1') then
+            ss_rdSel  <= "00";
+            ss_rdData <= (others => '0');
+            if (SS_Adr < 4) then
+               ss_rdData <= ss_out(to_integer(SS_Adr(1 downto 0)));
+            end if;
+         end if;
+         if (SS_rden_IMEM = '1') then
+            ss_rdSel <= "01";
+         end if;
+         if (SS_rden_DMEM = '1') then
+            ss_rdSel <= "10";
+         end if;
+      end if;
+   end process;
+   
+   SS_DataRead <= imem_q_a when (ss_rdSel = "01") else
+                  dmem_q_a when (ss_rdSel = "10") else
+                  ss_rdData;
 
    process (clk1x)
    begin

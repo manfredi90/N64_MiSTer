@@ -67,8 +67,14 @@ entity cpu is
       SS_Adr                : in  unsigned(11 downto 0);
       SS_wren_CPU           : in  std_logic;
       SS_rden_CPU           : in  std_logic;
-      SS_DataRead_CPU       : out std_logic_vector(63 downto 0);
-      SS_idle               : out std_logic
+      SS_DataRead_CPU       : out std_logic_vector(63 downto 0) := (others => '0');
+      SS_idle               : out std_logic;
+      
+      -- save: hold at the next interrupt (clk1x domain level), flush the data cache
+      ss_holdIRQ            : in  std_logic;
+      ss_cpuHeld            : out std_logic := '0';
+      ss_flush              : in  std_logic;
+      ss_flushDone          : out std_logic := '0'
    );
 end entity;
 
@@ -644,6 +650,19 @@ architecture arch of cpu is
    signal ss_regs_data                 : std_logic_vector(63 downto 0);   
    
    signal ss_FPUregs_load              : std_logic := '0';
+   
+   signal ss_holdIRQ_sync              : std_logic_vector(1 downto 0) := (others => '0');
+   signal ss_flush_sync                : std_logic_vector(1 downto 0) := (others => '0');
+   signal ss_irqHeld                   : std_logic;
+   signal ss_heldPC                    : unsigned(63 downto 0);
+   signal ss_drainCount                : integer range 0 to 255 := 0;
+   signal ss_DataRead_COP0             : std_logic_vector(63 downto 0);
+   signal FPUregsSS_q_b                : std_logic_vector(63 downto 0);
+   signal ss_FPU_CSR                   : unsigned(24 downto 0);
+   signal ss_flushStart                : std_logic := '0';
+   signal ss_flushRunning              : std_logic := '0';
+   signal ss_dcacheFlushDone           : std_logic;
+   signal ss_dcacheIdle                : std_logic;
    signal ss_FPUregs_addr              : unsigned(4 downto 0);
    signal ss_FPUregs_data              : std_logic_vector(63 downto 0);   
    
@@ -993,20 +1012,49 @@ begin
       q          => regs2_q_b
 	);
    
-   --iregisterfileSS : entity mem.RamMLAB
-	--GENERIC MAP 
-   --(
-   --   width                               => 64,
-   --   widthad                             => 5
-	--)
-	--PORT MAP (
-   --   inclock    => clk93,
-   --   wren       => regs_wren_a,
-   --   data       => regs_data_a,
-   --   wraddress  => regs_address_a,
-   --   rdaddress  => regsSS_address_b,
-   --   q          => regsSS_q_b
-	--);
+   iregisterfileSS : entity mem.RamMLAB
+	GENERIC MAP 
+   (
+      width                               => 64,
+      widthad                             => 5
+	)
+	PORT MAP (
+      inclock    => clk93,
+      wren       => regs_wren_a,
+      data       => regs_data_a,
+      wraddress  => regs_address_a,
+      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
+      q          => regsSS_q_b
+	);
+   
+   iregisterfileFPUSSLO : entity mem.RamMLAB
+	GENERIC MAP 
+   (
+      width                               => 32,
+      widthad                             => 5
+	)
+	PORT MAP (
+      inclock    => clk93,
+      wren       => FPUregs_wren_a(0),
+      data       => FPUregs_data_a(31 downto 0),
+      wraddress  => FPUregs_address_a,
+      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
+      q          => FPUregsSS_q_b(31 downto 0)
+	);
+   iregisterfileFPUSSHI : entity mem.RamMLAB
+	GENERIC MAP 
+   (
+      width                               => 32,
+      widthad                             => 5
+	)
+	PORT MAP (
+      inclock    => clk93,
+      wren       => FPUregs_wren_a(1),
+      data       => FPUregs_data_a(63 downto 32),
+      wraddress  => FPUregs_address_a,
+      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
+      q          => FPUregsSS_q_b(63 downto 32)
+	);
 
 --##############################################################
 --############################### stage 1
@@ -1137,7 +1185,7 @@ begin
                   end if;
                end if;
             
-            elsif (stall = 0 or fetchReady = '0') then
+            elsif ((stall = 0 or fetchReady = '0') and ss_irqHeld = '0') then
             
                PCold0             <= FetchAddr;
                PC                 <= FetchAddr;
@@ -2870,7 +2918,11 @@ begin
       writeTagEna       => writeDatacacheTagEna,      
       writeTagValue     => writeDatacacheTagValue,
       
-      SS_reset          => SS_reset
+      SS_reset          => SS_reset,
+      
+      ss_flush          => ss_flushStart,
+      ss_flushDone      => ss_dcacheFlushDone,
+      ss_idle           => ss_dcacheIdle
    );
 
    stall4Masked <= stall(4 downto 3) & (stall(2) and (not executeStallFromMEM)) & stall(1 downto 0);
@@ -3412,7 +3464,12 @@ begin
       SS_DataWrite            => SS_DataWrite,
       SS_Adr                  => SS_Adr,      
       SS_wren_CPU             => SS_wren_CPU, 
-      SS_rden_CPU             => SS_rden_CPU 
+      SS_rden_CPU             => SS_rden_CPU,
+      SS_DataRead_COP0        => ss_DataRead_COP0,
+      
+      ss_holdIRQ              => ss_holdIRQ_sync(1),
+      ss_irqHeld              => ss_irqHeld,
+      ss_heldPC               => ss_heldPC
    );
    
    icpu_mul : entity work.cpu_mul
@@ -3475,7 +3532,8 @@ begin
       FPUWriteMask      => FPUWriteMask,
       
       SS_FPU_CF         => ss_in(24)(32),
-      SS_CSR            => unsigned(ss_in(24)(24 downto 0))
+      SS_CSR            => unsigned(ss_in(24)(24 downto 0)),
+      SS_CSR_out        => ss_FPU_CSR
    );
    
 --##############################################################
@@ -3547,7 +3605,61 @@ begin
       end if;
    end process;
    
-   SS_DataRead_CPU <= (others => '0');
+   -- savestate readback, same layout as the load: 0..31 cpu, 32..63 GPR, 64..95 cop0, 96..127 FPR, 256..319 TLB
+   process (clk93)
+   begin
+      if (rising_edge(clk93)) then
+      
+         if (SS_Adr < 32) then
+            SS_DataRead_CPU <= (others => '0');
+            case (to_integer(SS_Adr(4 downto 0))) is
+               when  0 => SS_DataRead_CPU <= std_logic_vector(ss_heldPC); -- interrupted instruction, the interrupt is still pending
+               when  3 => SS_DataRead_CPU <= std_logic_vector(hi);
+               when  4 => SS_DataRead_CPU <= std_logic_vector(lo);
+               when 24 =>
+                  SS_DataRead_CPU(32)          <= FPU_CF;
+                  SS_DataRead_CPU(24 downto 0) <= std_logic_vector(ss_FPU_CSR);
+               when others => null;
+            end case;
+         elsif (SS_Adr < 64) then
+            SS_DataRead_CPU <= regsSS_q_b;
+         elsif (SS_Adr < 96) then
+            SS_DataRead_CPU <= ss_DataRead_COP0;
+         elsif (SS_Adr < 128) then
+            SS_DataRead_CPU <= FPUregsSS_q_b;
+         else
+            SS_DataRead_CPU <= ss_DataRead_COP0;
+         end if;
+         
+         ss_holdIRQ_sync <= ss_holdIRQ_sync(0) & ss_holdIRQ;
+         ss_flush_sync   <= ss_flush_sync(0) & ss_flush;
+         
+         -- held interrupt: count pipeline advances until everything older is written back
+         if (reset_93 = '1' or ss_irqHeld = '0') then
+            ss_drainCount <= 0;
+         elsif (ce_93 = '1' and stall = 0 and hiloWait = 0 and ss_drainCount < 255) then
+            ss_drainCount <= ss_drainCount + 1;
+         end if;
+         
+         ss_cpuHeld <= '0';
+         if (ss_irqHeld = '1' and ss_drainCount = 255 and writefifo_Empty = '1' and writefifo_cnt = 0 and ss_dcacheIdle = '1') then
+            ss_cpuHeld <= '1';
+         end if;
+         
+         -- one flush per request, done stays set until the request is gone
+         ss_flushStart <= '0';
+         if (ss_flush_sync(1) = '0') then
+            ss_flushDone    <= '0';
+            ss_flushRunning <= '0';
+         elsif (ss_flushRunning = '0') then
+            ss_flushStart   <= '1';
+            ss_flushRunning <= '1';
+         elsif (ss_dcacheFlushDone = '1') then
+            ss_flushDone    <= '1';
+         end if;
+      
+      end if;
+   end process;
    
 --##############################################################
 --############################### debug

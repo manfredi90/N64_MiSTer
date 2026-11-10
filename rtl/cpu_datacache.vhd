@@ -59,7 +59,12 @@ entity cpu_datacache is
       writeTagEna       : out std_logic := '0';
       writeTagValue     : out unsigned(21 downto 0) := (others => '0');
 
-      SS_reset          : in  std_logic
+      SS_reset          : in  std_logic;
+      
+      -- savestates: write back all dirty lines
+      ss_flush          : in  std_logic;
+      ss_flushDone      : out std_logic := '0';
+      ss_idle           : out std_logic
    );
 end entity;
 
@@ -119,7 +124,11 @@ architecture arch of cpu_datacache is
       WRITEBACK2WRITE,
       WRITEBACKDONE,
       COMMANDPROCESS,
-      COMMANDDONE
+      COMMANDDONE,
+      FLUSHREAD,
+      FLUSHWAIT,
+      FLUSHCHECK,
+      FLUSHNEXT
    );
    signal state : tstate := IDLE;
    
@@ -142,6 +151,11 @@ architecture arch of cpu_datacache is
    signal slowcnt    : unsigned(3 downto 0) := (others => '0');
    
    signal force_wb   : std_logic := '0';
+   
+   -- savestates
+   signal isFlush          : std_logic := '0';
+   signal flushIdx         : unsigned(8 downto 0) := (others => '0');
+   signal ss_tag_q         : std_logic_vector(21 downto 0);
    signal wb_done    : std_logic := '0';
    
 begin 
@@ -183,6 +197,29 @@ begin
    ); 
    
    tag_address_b <= std_logic_vector(tag_addr(12 downto 4));
+   
+   -- copy of the tags with its own read port, so the flush does not touch the lookup path
+   itagram_SS : entity mem.dpram
+   generic map 
+   ( 
+      addr_width  => 9,
+      data_width  => 22
+   )
+   port map
+   (
+      clock_a     => clk93,
+      address_a   => tag_address_a,
+      data_a      => tag_data_a,
+      wren_a      => tag_wren_a,
+      
+      clock_b     => clk93,
+      address_b   => std_logic_vector(flushIdx),
+      data_b      => 22x"0",
+      wren_b      => '0',
+      q_b         => ss_tag_q
+   ); 
+   
+   ss_idle <= '1' when (state = IDLE) else '0';
    
    tag_compare   <= tag_newData when (tag_newEna = '1') else
                     tag_q_b;
@@ -321,6 +358,7 @@ begin
          tag_wren_cmd      <= '0';
          wb_done           <= '0';
          writeTagEna       <= '0';
+         ss_flushDone      <= '0';
          
          if (ce_fetch = '1') then
             tag_addr_1   <= tag_addr;
@@ -370,6 +408,7 @@ begin
                   tag_read_addr  <= tag_addr_1(12 downto 0);
                   isCommand      <= '0'; 
                   isWB           <= '0'; 
+                  isFlush        <= '0'; 
                   ram_reqAddr    <= RW_addr(31 downto 0); 
                   tag_data_cmd   <= write_ena & '1' & std_logic_vector(RW_addr(31 downto 12)); -- default for fill
                   tag_addr_cmd   <= std_logic_vector(tag_addr_1(12 downto 4)); 
@@ -454,6 +493,10 @@ begin
                         when others => state <= IDLE;
                      end case;
                      
+                  elsif (ss_flush = '1') then
+                     state    <= FLUSHREAD;
+                     flushIdx <= (others => '0');
+                     
                   end if;
 
                when CLEARCACHE =>
@@ -516,6 +559,8 @@ begin
                         if (writeMode = '1' and force_wb = '1') then
                            isWB <= '1';
                         end if;
+                     elsif (isFlush = '1') then
+                        state             <= FLUSHNEXT;
                      else
                         state             <= IDLE;
                         CachecommandDone  <= isCommand;
@@ -529,6 +574,37 @@ begin
                when COMMANDDONE =>
                   state             <= IDLE;
                   CachecommandDone  <= '1';
+                  
+               -- savestates: every valid and dirty line goes to RDRAM and stays valid but clean
+               when FLUSHREAD =>
+                  state <= FLUSHWAIT;
+                  
+               when FLUSHWAIT =>
+                  state <= FLUSHCHECK;
+                  
+               when FLUSHCHECK =>
+                  if (ss_tag_q(21 downto 20) = "11") then
+                     state          <= WRITEBACK1ADDR;
+                     isFlush        <= '1';
+                     fillNext       <= '0';
+                     tag_read_addr  <= flushIdx & "0000";
+                     tag_addr_low   <= (others => '0');
+                     writeback_addr <= unsigned(ss_tag_q(19 downto 0)) & flushIdx(7 downto 0) & "0000";
+                     tag_wren_cmd   <= '1';
+                     tag_addr_cmd   <= std_logic_vector(flushIdx);
+                     tag_data_cmd   <= "01" & ss_tag_q(19 downto 0);
+                  else
+                     state <= FLUSHNEXT;
+                  end if;
+                  
+               when FLUSHNEXT =>
+                  if (flushIdx = 511) then
+                     state        <= IDLE;
+                     ss_flushDone <= '1';
+                  else
+                     state    <= FLUSHREAD;
+                     flushIdx <= flushIdx + 1;
+                  end if;
                   
             end case;  
             
