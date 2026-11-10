@@ -1707,7 +1707,8 @@ begin
    process (clk1x)
    begin
       if (rising_edge(clk1x)) then
-         ss_systemIdle <= ss_idle_RSP and ss_idle_RDP and ss_idle_PI and ss_idle_SI and sdrammux_idle;
+         -- not the SDRAM mux: the VI reads from it every line, and its content is not part of the state
+         ss_systemIdle <= ss_idle_RSP and ss_idle_RDP and ss_idle_PI and ss_idle_SI;
       end if;
    end process;
    
