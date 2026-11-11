@@ -1012,49 +1012,50 @@ begin
       q          => regs2_q_b
 	);
    
-   iregisterfileSS : entity mem.RamMLAB
-	GENERIC MAP 
+   -- copies of the register files for savestates, in block RAM
+   iregisterfileSS : entity mem.dpram
+   generic map (addr_width => 5, data_width => 64)
+   port map
    (
-      width                               => 64,
-      widthad                             => 5
-	)
-	PORT MAP (
-      inclock    => clk93,
-      wren       => regs_wren_a,
-      data       => regs_data_a,
-      wraddress  => regs_address_a,
-      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
-      q          => regsSS_q_b
-	);
+      clock_a     => clk93,
+      address_a   => regs_address_a,
+      data_a      => regs_data_a,
+      wren_a      => regs_wren_a,
+      clock_b     => clk93,
+      address_b   => std_logic_vector(SS_Adr(4 downto 0)),
+      data_b      => 64x"0",
+      wren_b      => '0',
+      q_b         => regsSS_q_b
+   );
    
-   iregisterfileFPUSSLO : entity mem.RamMLAB
-	GENERIC MAP 
+   iregisterfileFPUSSLO : entity mem.dpram
+   generic map (addr_width => 5, data_width => 32)
+   port map
    (
-      width                               => 32,
-      widthad                             => 5
-	)
-	PORT MAP (
-      inclock    => clk93,
-      wren       => FPUregs_wren_a(0),
-      data       => FPUregs_data_a(31 downto 0),
-      wraddress  => FPUregs_address_a,
-      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
-      q          => FPUregsSS_q_b(31 downto 0)
-	);
-   iregisterfileFPUSSHI : entity mem.RamMLAB
-	GENERIC MAP 
+      clock_a     => clk93,
+      address_a   => FPUregs_address_a,
+      data_a      => FPUregs_data_a(31 downto 0),
+      wren_a      => FPUregs_wren_a(0),
+      clock_b     => clk93,
+      address_b   => std_logic_vector(SS_Adr(4 downto 0)),
+      data_b      => 32x"0",
+      wren_b      => '0',
+      q_b         => FPUregsSS_q_b(31 downto 0)
+   );
+   iregisterfileFPUSSHI : entity mem.dpram
+   generic map (addr_width => 5, data_width => 32)
+   port map
    (
-      width                               => 32,
-      widthad                             => 5
-	)
-	PORT MAP (
-      inclock    => clk93,
-      wren       => FPUregs_wren_a(1),
-      data       => FPUregs_data_a(63 downto 32),
-      wraddress  => FPUregs_address_a,
-      rdaddress  => std_logic_vector(SS_Adr(4 downto 0)),
-      q          => FPUregsSS_q_b(63 downto 32)
-	);
+      clock_a     => clk93,
+      address_a   => FPUregs_address_a,
+      data_a      => FPUregs_data_a(63 downto 32),
+      wren_a      => FPUregs_wren_a(1),
+      clock_b     => clk93,
+      address_b   => std_logic_vector(SS_Adr(4 downto 0)),
+      data_b      => 32x"0",
+      wren_b      => '0',
+      q_b         => FPUregsSS_q_b(63 downto 32)
+   );
 
 --##############################################################
 --############################### stage 1

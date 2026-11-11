@@ -537,24 +537,24 @@ begin
       
          if (reset = '1') then
          
-            COP0_0_INDEX_tlbEntry           <= ss_in(0)(5 downto 0);
-            COP0_0_INDEX_probefailure       <= ss_in(0)(31);
+            COP0_0_INDEX_tlbEntry           <= (others => '0');
+            COP0_0_INDEX_probefailure       <= '0';
             COP0_1_RANDOM                   <= (others => '0');
-            COP0_2_ENTRYLO0_phyAdr          <= ss_in(2)(29 downto 6);
-            COP0_2_ENTRYLO0_cache           <= ss_in(2)(5 downto 3);
-            COP0_2_ENTRYLO0_dirty           <= ss_in(2)(2);       
-            COP0_2_ENTRYLO0_valid           <= ss_in(2)(1);       
-            COP0_2_ENTRYLO0_global          <= ss_in(2)(0);
-            COP0_3_ENTRYLO1_phyAdr          <= ss_in(3)(29 downto 6);
-            COP0_3_ENTRYLO1_cache           <= ss_in(3)(5 downto 3);
-            COP0_3_ENTRYLO1_dirty           <= ss_in(3)(2);       
-            COP0_3_ENTRYLO1_valid           <= ss_in(3)(1);       
-            COP0_3_ENTRYLO1_global          <= ss_in(3)(0);
-            COP0_4_CONTEXT_PTE              <= ss_in(4)(63 downto 23);
-            COP0_4_CONTEXT_BADVPN           <= ss_in(4)(22 downto 4);
-            COP0_5_PAGEMASK                 <= ss_in(5)(24 downto 13);
+            COP0_2_ENTRYLO0_phyAdr          <= (others => '0');
+            COP0_2_ENTRYLO0_cache           <= (others => '0');
+            COP0_2_ENTRYLO0_dirty           <= '0';       
+            COP0_2_ENTRYLO0_valid           <= '0';       
+            COP0_2_ENTRYLO0_global          <= '0';
+            COP0_3_ENTRYLO1_phyAdr          <= (others => '0');
+            COP0_3_ENTRYLO1_cache           <= (others => '0');
+            COP0_3_ENTRYLO1_dirty           <= '0';       
+            COP0_3_ENTRYLO1_valid           <= '0';       
+            COP0_3_ENTRYLO1_global          <= '0';
+            COP0_4_CONTEXT_PTE              <= ss_in(4)(63 downto 23); -- page table base for TLB refill handlers
+            COP0_4_CONTEXT_BADVPN           <= (others => '0');
+            COP0_5_PAGEMASK                 <= (others => '0');
             COP0_6_WIRED                    <= ss_in(6)(5 downto 0); -- (others => '0');
-            COP0_8_BADVIRTUALADDRESS        <= ss_in(8);
+            COP0_8_BADVIRTUALADDRESS        <= (others => '0');
             COP0_9_COUNT                    <= ss_in(9)(31 downto 0) & '0'; -- (others => '0');
             COP0_10_ENTRYHI_addressSpaceID  <= ss_in(10)(7 downto 0); 
             COP0_10_ENTRYHI_virtualAddress  <= ss_in(10)(39 downto 13); 
@@ -586,22 +586,22 @@ begin
             COP0_13_CAUSE_interruptPending  <= ss_in(13)(15 downto 8); -- software and timer interrupts, the others follow their sources
             COP0_13_CAUSE_coprocessorError  <= (others => '0'); 
             COP0_13_CAUSE_branchDelay       <= ss_in(13)(31);          -- '0'
-            COP0_14_EPC                     <= ss_in(14);
+            COP0_14_EPC                     <= unsigned(resize(signed(ss_in(14)(31 downto 0)), 64));
             COP0_16_CONFIG_cacheAlgoKSEG0   <= ss_in(16)(1 downto 0); -- (others => '0'); required for systemtest
             COP0_16_CONFIG_cu               <= (others => '0'); 
             COP0_16_CONFIG_bigEndian        <= '1';
             COP0_16_CONFIG_sysadWBPattern   <= (others => '0'); 
             COP0_16_CONFIG_systemClockRatio <= (others => '1'); 
-            COP0_17_LOADLINKEDADDRESS       <= ss_in(17); 
+            COP0_17_LOADLINKEDADDRESS       <= (others => '0'); 
             COP0_18_WATCHLO                 <= (others => '0');   
             COP0_19_WATCHHI                 <= (others => '0');   
-            COP0_20_XCONTEXT_PTE            <= ss_in(20)(63 downto 33);
-            COP0_20_XCONTEXT_Region         <= ss_in(20)(32 downto 31);
-            COP0_20_XCONTEXT_BadVPN         <= ss_in(20)(30 downto 4);
+            COP0_20_XCONTEXT_PTE            <= (others => '0');
+            COP0_20_XCONTEXT_Region         <= (others => '0');
+            COP0_20_XCONTEXT_BadVPN         <= (others => '0');
             COP0_26_PARITYERROR             <= (others => '0');  
-            COP0_28_TAGLO_primaryCacheState <= ss_in(28)(7 downto 6);     
-            COP0_28_TAGLO_physicalAddress   <= ss_in(28)(27 downto 8);     
-            COP0_30_EPCERROR                <= ss_in(30); 
+            COP0_28_TAGLO_primaryCacheState <= (others => '0');     
+            COP0_28_TAGLO_physicalAddress   <= (others => '0');     
+            COP0_30_EPCERROR                <= (others => '0'); 
             
             COP0_LATCH                      <= (others => '0'); 
             
@@ -1334,23 +1334,8 @@ begin
    process (all)
    begin
       ss_out <= (others => (others => '0'));
-      ss_out(0)(5 downto 0)    <= COP0_0_INDEX_tlbEntry;
-      ss_out(0)(31)            <= COP0_0_INDEX_probefailure;
-      ss_out(2)(29 downto 6)   <= COP0_2_ENTRYLO0_phyAdr;
-      ss_out(2)(5 downto 3)    <= COP0_2_ENTRYLO0_cache;
-      ss_out(2)(2)             <= COP0_2_ENTRYLO0_dirty;
-      ss_out(2)(1)             <= COP0_2_ENTRYLO0_valid;
-      ss_out(2)(0)             <= COP0_2_ENTRYLO0_global;
-      ss_out(3)(29 downto 6)   <= COP0_3_ENTRYLO1_phyAdr;
-      ss_out(3)(5 downto 3)    <= COP0_3_ENTRYLO1_cache;
-      ss_out(3)(2)             <= COP0_3_ENTRYLO1_dirty;
-      ss_out(3)(1)             <= COP0_3_ENTRYLO1_valid;
-      ss_out(3)(0)             <= COP0_3_ENTRYLO1_global;
       ss_out(4)(63 downto 23)  <= COP0_4_CONTEXT_PTE;
-      ss_out(4)(22 downto 4)   <= COP0_4_CONTEXT_BADVPN;
-      ss_out(5)(24 downto 13)  <= COP0_5_PAGEMASK;
       ss_out(6)(5 downto 0)    <= COP0_6_WIRED;
-      ss_out(8)                <= COP0_8_BADVIRTUALADDRESS;
       ss_out(9)(31 downto 0)   <= COP0_9_COUNT(32 downto 1);
       ss_out(10)(7 downto 0)   <= COP0_10_ENTRYHI_addressSpaceID;
       ss_out(10)(39 downto 13) <= COP0_10_ENTRYHI_virtualAddress;
@@ -1380,38 +1365,36 @@ begin
       ss_out(12)(31)           <= COP0_12_SR_enable_cop3;
       ss_out(13)(15 downto 8)  <= COP0_13_CAUSE_interruptPending;
       ss_out(13)(31)           <= COP0_13_CAUSE_branchDelay;
-      ss_out(14)               <= COP0_14_EPC;
+      ss_out(14)(31 downto 0)  <= COP0_14_EPC(31 downto 0);
       ss_out(16)(1 downto 0)   <= COP0_16_CONFIG_cacheAlgoKSEG0;
-      ss_out(17)               <= COP0_17_LOADLINKEDADDRESS;
-      ss_out(20)(63 downto 33) <= COP0_20_XCONTEXT_PTE;
-      ss_out(20)(32 downto 31) <= COP0_20_XCONTEXT_Region;
-      ss_out(20)(30 downto 4)  <= COP0_20_XCONTEXT_BadVPN;
-      ss_out(28)(7 downto 6)   <= COP0_28_TAGLO_primaryCacheState;
-      ss_out(28)(27 downto 8)  <= COP0_28_TAGLO_physicalAddress;
-      ss_out(30)               <= COP0_30_EPCERROR;
    end process;
    
    -- copy of the TLB entries, read only for savestates
-   iTLBMEM_SS : entity mem.RamMLAB
-	GENERIC MAP 
+   iTLBMEM_SS : entity mem.dpram
+   generic map 
+   ( 
+      addr_width  => 5,
+      data_width  => 101
+   )
+   port map
    (
-      width      => 101,
-      widthad    => 5
-	)
-	PORT MAP (
-      inclock    => clk93,
-      wren       => TLBMEM_writeEnable,
-      data       => TLBMEM_writeData,
-      wraddress  => TLBMEM_writeAddr,
-      rdaddress  => std_logic_vector(SS_Adr(5 downto 1)),
-      q          => ss_TLBreadData
-	);
+      clock_a     => clk93,
+      address_a   => TLBMEM_writeAddr,
+      data_a      => TLBMEM_writeData,
+      wren_a      => TLBMEM_writeEnable,
+      
+      clock_b     => clk93,
+      address_b   => std_logic_vector(SS_Adr(5 downto 1)),
+      data_b      => (100 downto 0 => '0'),
+      wren_b      => '0',
+      q_b         => ss_TLBreadData
+   );
    
    -- cop0 registers at 64..95, TLB entries at 256..319, in the format of the load path
    process (clk93)
    begin
       if (rising_edge(clk93)) then
-         if (SS_rden_CPU = '1') then
+         if (1 = 1) then -- address is stable for many cycles before the value is taken
             SS_DataRead_COP0 <= (others => '0');
             if (SS_Adr >= 64 and SS_Adr < 96) then
                SS_DataRead_COP0 <= std_logic_vector(ss_out(to_integer(SS_Adr(4 downto 0))));
